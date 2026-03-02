@@ -63,13 +63,15 @@
         <div class="sort-jump-group">
             <div class="sort-controls">
                 <span class="sort-label">Sort by:</span> <!-- Этот текст будет слева -->
-                <div class="sort-buttons-group"> <!-- Новая обертка для кнопок -->
+                <div class="sort-buttons-grid"> <!-- Изменено на grid-контейнер -->
                     <button id="sort-by-name" class="sort-button" data-sort-by="name">
                         Name <span class="sort-arrow"></span></button>
-                    <button id="sort-by-uniqueness" class="sort-button" data-sort-by="uniqueness">
-                        Uniqueness <span class="sort-arrow"></span></button>
                     <button id="sort-by-works" class="sort-button" data-sort-by="works">
                         Works <span class="sort-arrow"></span></button>
+                    <button id="sort-by-uniqueness" class="sort-button" data-sort-by="uniqueness" title="Sort by uniqueness score">
+                        Unique <span class="sort-arrow"></span></button>
+                    <button id="sort-by-random" class="sort-button" data-sort-by="random">
+                        Random <span class="sort-arrow"></span></button>
                 </div>
             </div>
             <!-- Контейнер для кнопки экспорта в TXT (возвращаем в левый блок) -->

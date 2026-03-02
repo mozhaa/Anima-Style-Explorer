@@ -107,10 +107,10 @@ body {
 
 .search-and-import-wrapper {
     flex: 0 1 auto; /* Убираем растягивание, чтобы блок занимал место по контенту */
-    margin: 0 auto; /* Центрируем блок в доступном пространстве */
     display: flex;
     flex-direction: column;
     align-items: center;
+    margin: 0 auto; /* Центрируем по горизонтали */
     gap: 10px; /* Добавляем отступ между элементами внутри (поиском, подсказкой, кнопками) */
 }
 
@@ -194,7 +194,7 @@ body {
     display: flex;
     flex-direction: column;
     gap: 15px;
-    width: 215px; /* Возвращаем фиксированную ширину, равную правому блоку */
+    width: 270px; /* Увеличиваем ширину, чтобы вместить кнопки сортировки */
 }
 /* Контейнер для кнопки экспорта TXT, который теперь в левой колонке */
 #txt-export-container {
@@ -211,10 +211,13 @@ body {
 
 .sort-controls {
     display: flex;
-    align-items: center;
-    justify-content: flex-start; /* Выравниваем по левому краю, чтобы метка не уезжала */
+    flex-direction: column; /* Ставим элементы друг под другом */
+    align-items: flex-start; /* Выравниваем по левому краю */
+    flex-direction: row; /* Ставим элементы в одну строку */
+    align-items: center; /* Выравниваем по центру по вертикали */
     gap: 10px; /* Возвращаем отступ между меткой и кнопками */
     width: 100%; /* Заставляем контейнер занять всю ширину родителя */
+    justify-content: flex-start;
 }
 
 .sort-label {
@@ -229,23 +232,35 @@ body {
     gap: 10px; /* Сохраняем отступ между кнопками */
 }
 
+/* Новый стиль для сетки кнопок сортировки */
+.sort-buttons-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr; /* Две колонки одинаковой ширины */
+    row-gap: 10px; /* Вертикальный отступ между рядами кнопок */
+    column-gap: 8px; /* Горизонтальный отступ между кнопками */
+    flex: 1; /* Позволяем сетке занимать доступное пространство и сжиматься при необходимости */
+}
+
 .sort-button {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    justify-content: center; /* Центрируем текст и стрелку внутри кнопки */
-    background-color: var(--card-background);
-    color: var(--text-color);
-    border: 1px solid var(--border-color);
     border-radius: var(--global-border-radius);
-    padding: 8px 12px;
-    font-size: 13px;
+    gap: 8px; /* Увеличиваем отступ для соответствия кнопке Swipe */
+    justify-content: center; /* Центрируем текст и стрелку внутри кнопки */
+    background-color: var(--card-background); /* Возвращаем фон самим кнопкам */
+    color: var(--text-color);
+    border: 1px solid var(--border-color); /* Добавляем рамку, как у кнопки Swipe */
+    padding: 8px 12px; /* Увеличиваем отступы */
+    font-size: 13px; /* Увеличиваем шрифт */
+    font-weight: 600; /* Делаем шрифт жирным, как у кнопки Swipe */
     font-family: inherit;
+    white-space: nowrap; /* Предотвращаем перенос текста */
     cursor: pointer;
-    transition: background-color 0.2s, border-color 0.2s;
+    transition: background-color 0.2s, border-color 0.2s, color 0.2s; /* Добавляем color в transition */
 }
 .sort-button:hover {
-    background-color: var(--border-color);
+    border-color: var(--accent-color); /* При наведении меняем цвет рамки */
+    color: var(--accent-color); /* При наведении меняем цвет текста */
 }
 
 /* Контейнер для кнопок импорта/экспорта JSON */
@@ -279,13 +294,10 @@ body {
 }
 
 .sort-button.active {
-    border-color: var(--accent-color);
-    color: var(--accent-color);
-}
-/* Устанавливаем ширину кнопки Uniqueness по содержимому */
-#sort-by-uniqueness {
-    flex: 0 1 auto; /* Позволяем кнопке иметь автоматическую ширину */
-    width: auto;
+    /* Стиль для активной кнопки */
+    background-color: var(--accent-color); /* Заливаем акцентным цветом */
+    border-color: var(--accent-color); /* Рамка того же цвета */
+    color: #fff; /* Белый текст для лучшего контраста */
 }
 
 .sort-arrow {
@@ -342,7 +354,7 @@ input[type="search"]::-webkit-search-results-decoration {
     justify-content: flex-end;
     align-items: flex-start; /* Выравниваем по верху, как и левый блок */
     gap: 40px; /* Сохраняем отступ между свайпом и сеткой */
-    width: 215px; /* Задаем ту же ширину, что и у левого блока для симметрии */
+    width: 270px; /* Задаем ту же ширину, что и у левого блока для симметрии */
 }
 
 .swipe-launch-controls {
@@ -408,6 +420,17 @@ input[type="search"]::-webkit-search-results-decoration {
     border-radius: var(--global-border-radius); /* Единый радиус */
     white-space: nowrap; /* Запрещаем перенос текста в подсказке */
     user-select: none; /* Предотвращаем выделение текста */
+}
+
+/* Стили для новой подсказки о "прыжке к художнику" */
+#jump-to-artist-hint {
+    background-color: var(--accent-color);
+    color: #fff;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+#jump-to-artist-hint:hover {
+    background-color: #007aff; /* Более яркий оттенок при наведении */
 }
 
 #grid-slider-value {
@@ -710,6 +733,11 @@ input[type="range"]::-webkit-slider-thumb {
     /* На мобильных возвращаем центрирование для кнопок сортировки */
     .sort-controls {
         justify-content: center;
+        width: auto; /* Убираем растягивание на всю ширину */
+    }
+    .sort-buttons-grid {
+        flex: none; /* Отменяем растягивание сетки кнопок */
+        width: 200px; /* Задаем фиксированную ширину для компактности */
     }
     .search-input {
         text-align: center; /* Центрируем текст на мобильных */

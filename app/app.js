@@ -9,6 +9,7 @@
     const sortByNameBtn = document.getElementById('sort-by-name');
     const sortByWorksBtn = document.getElementById('sort-by-works');
     const sortByUniquenessBtn = document.getElementById('sort-by-uniqueness');
+    const sortByRandomBtn = document.getElementById('sort-by-random'); // Новая кнопка
     const scrollToTopBtn = document.getElementById('scroll-to-top');
     const gridSlider = document.getElementById('grid-slider');
     const gridSliderValue = document.getElementById('grid-slider-value');
@@ -20,6 +21,7 @@
     const importFavoritesInput = document.getElementById('import-favorites-input');
     const swipeContinueHint = document.getElementById('swipe-continue-hint'); // Новый элемент
     const jumpInput = document.getElementById('jump-input');
+    const jumpToArtistHint = document.createElement('div'); // Элемент для подсказки о "прыжке"
     const clearJumpBtn = document.getElementById('clear-jump-btn'); // Эта кнопка теперь крестик
     const jumpControls = document.querySelector('.jump-controls');
     const searchWrapper = document.querySelector('.search-wrapper');
@@ -29,7 +31,7 @@
     let itemsSortedByWorks = []; // Новый массив для быстрого поиска по работам
     let favorites = new Map(); // Используем Map для хранения {id: timestamp}
     let currentItems = [];
-    let currentPage = 0;
+    let currentPage = 0; // Текущая страница для ленивой загрузки
     let startIndexOffset = 0; // Смещение для "перехода к номеру"
     const itemsPerPage = 20;
     let searchTerm = ''; // 'gallery', 'favorites'
@@ -42,6 +44,7 @@
     let previousSortDirection = null; // Для восстановления сортировки после "Jump"
     let jumpTimeout; // Таймер для отложенного перехода
     const SORT_TYPE_KEY = 'sortType';
+    let isJumpingToArtist = false; // Флаг для отслеживания состояния "прыжка"
     const SORT_DIRECTION_KEY = 'sortDirection';
 
     // --- Глобальные переменные для доступа из других скриптов ---
@@ -115,6 +118,16 @@
         });
     }
 
+    /**
+     * Алгоритм тасования Фишера-Йетса для случайного перемешивания массива.
+     * @param {Array} array - Массив для перемешивания.
+     */
+    function shuffleArray(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]]; // Обмен элементами
+        }
+    }
     /**
      * Debug: Проверяет доступность всех изображений и выводит статистику в консоль.
      * Работает только если DEBUG_MODE = true.
@@ -279,23 +292,35 @@
         // --- Логика "Продолжить просмотр" ---
         const jumpToArtistId = localStorage.getItem('jumpToArtistId');
         if (jumpToArtistId && currentView === 'gallery') {
-            // Сначала применяем текущую сортировку, чтобы найти правильный индекс
-            let tempSortedItems = [...allItems];
-            const tempDirection = sortDirection === 'asc' ? 1 : -1;
-            if (sortType === 'name') {
-                tempSortedItems.sort((a, b) => a.artist.localeCompare(b.artist) * tempDirection);
-            } else if (sortType === 'works') {
-                tempSortedItems.sort((a, b) => (a.worksCount - b.worksCount) * tempDirection);
-            } else if (sortType === 'uniqueness') {
-                tempSortedItems.sort((a, b) => (b.uniqueness_score || 0) - (a.uniqueness_score || 0));
+            // Новая логика: если текущая сортировка "случайная", принудительно меняем её на "по работам"
+            if (sortType === 'random') {
+                sortType = 'works';
+                sortDirection = 'desc';
+                // Сохраняем новый выбор в localStorage
+                localStorage.setItem(SORT_TYPE_KEY, sortType);
+                localStorage.setItem(SORT_DIRECTION_KEY, sortDirection);
+                updateSortButtonsUI(); // Обновляем UI кнопок сортировки после изменения
             }
+                let tempSortedItems = [...allItems];
+                const tempDirection = sortDirection === 'asc' ? 1 : -1;
+                if (sortType === 'name') {
+                    tempSortedItems.sort((a, b) => a.artist.localeCompare(b.artist) * tempDirection);
+                } else if (sortType === 'works') {
+                    tempSortedItems.sort((a, b) => (a.worksCount - b.worksCount) * tempDirection);
+                } else if (sortType === 'uniqueness') {
+                    tempSortedItems.sort((a, b) => (b.uniqueness_score || 0) - (a.uniqueness_score || 0));
+                }
 
-            const targetIndex = tempSortedItems.findIndex(item => item.id === jumpToArtistId);
+                const targetIndex = tempSortedItems.findIndex(item => item.id === jumpToArtistId);
 
-            if (targetIndex !== -1) {
-                // Устанавливаем смещение, чтобы начать рендер с нужного места
-                startIndexOffset = targetIndex;
-            }
+                if (targetIndex !== -1) {
+                    // Устанавливаем смещение, чтобы начать рендер с нужного места
+                    startIndexOffset = targetIndex;
+                    isJumpingToArtist = true; // Устанавливаем флаг
+                } else {
+                    // Если по какой-то причине не нашли, сбрасываем флаг
+                    isJumpingToArtist = false;
+                }
         }
         // --- Конец логики ---
 
@@ -314,6 +339,9 @@
         } else if (sortType === 'uniqueness') {
             // Для 'uniqueness' направление всегда 'desc'
             sortedItems.sort((a, b) => (b.uniqueness_score || 0) - (a.uniqueness_score || 0));
+        } else if (sortType === 'random') {
+            // Случайная сортировка с использованием алгоритма Фишера-Йетса
+            shuffleArray(sortedItems);
         }
         
         // Добавляем ранг после основной сортировки, но до других фильтров
@@ -405,6 +433,7 @@
             const jumpToArtistId = localStorage.getItem('jumpToArtistId');
             if (jumpToArtistId) {
                 localStorage.removeItem('jumpToArtistId');
+                // Флаг isJumpingToArtist будет сброшен при следующем renderView
             }
 
         }, 500);
@@ -529,6 +558,15 @@
         swipeLaunchControls.classList.toggle('disabled', isSearchingByName || isJumpingByCount);
     }
 
+    function updateJumpToArtistHint() {
+        if (isJumpingToArtist && currentView === 'gallery') {
+            jumpToArtistHint.style.display = 'block';
+        } else {
+            jumpToArtistHint.style.display = 'none';
+        }
+        updateControlsState(); // Обновляем состояние контролов, т.к. подсказка может влиять на них
+    }
+
     // --- Обработчики событий ---
 
     // Появление/скрытие кнопки "Наверх"
@@ -565,6 +603,8 @@
         swipeLaunchControls.style.display = 'flex';
         sortControls.style.display = 'flex';
         currentView = 'gallery';
+        // Сбрасываем флаг принудительно, если пользователь сам переключился на галерею
+        isJumpingToArtist = false;
         // Обновляем счетчик для отображения общего количества стилей
         styleCounter.innerHTML = `Artist-based styles: <span class="style-count-number">${allItems.length.toLocaleString('en-US')}</span>`;
 
@@ -596,6 +636,7 @@
         // Сбрасываем состояние "перехода", так как он не применяется к избранному
         startIndexOffset = 0;
         jumpInput.value = '';
+        isJumpingToArtist = false; // Сбрасываем флаг при переходе в избранное
         
         // Также сбрасываем состояние перехода и разблокируем другие контролы
         resetJumpState(false); // false - чтобы не вызывать renderView() повторно
@@ -741,6 +782,7 @@
         // Если пользователь очистил поиск, сбрасываем смещение от "перехода"
         if (searchTerm.length > 0 && !isSearching) {
             startIndexOffset = 0;
+            isJumpingToArtist = false;
         }
 
         searchTerm = newSearchTerm;
@@ -768,6 +810,7 @@
         const targetValue = parseInt(jumpInput.value, 10);
         if (isReset || !jumpInput.value) {
             resetJumpState();
+            isJumpingToArtist = false;
             return;
         }
 
@@ -785,6 +828,7 @@
             }
             // Ранг начинается с 1, а индекс с 0
             startIndexOffset = Math.max(0, targetRank - 1);
+            isJumpingToArtist = false; // "Прыжок к художнику" и "прыжок к рангу" - разные вещи
             // Сортировка уже правильная, просто перерисовываем
             renderView();
         } else {
@@ -811,6 +855,7 @@
 
             // Устанавливаем смещение точно на найденный индекс, без запаса
             startIndexOffset = foundIndex;
+            isJumpingToArtist = false; // "Прыжок к художнику" и "прыжок по работам" - разные вещи
             // Принудительно устанавливаем сортировку по работам (по убыванию)
             sortType = 'works';
             sortDirection = 'desc';
@@ -825,6 +870,7 @@
 
     function resetJumpState(shouldRender = true) {
         startIndexOffset = 0;
+        isJumpingToArtist = false; // Сбрасываем и этот флаг тоже
 
         // Если мы были в режиме перехода по рангу, не меняем сортировку
         if (sortType === 'uniqueness') {
@@ -841,6 +887,7 @@
 
         updateSortButtonsUI(); // Обновляем UI кнопок сортировки
         updateControlsState(); // Обновляем состояние контролов
+        updateJumpToArtistHint(); // Обновляем подсказку
 
 
         jumpInput.value = ''; // Очищаем поле только после всех операций
@@ -886,14 +933,15 @@
 
     // --- Управление сортировкой ---
     function updateSortButtonsUI() {
-        // Сброс состояния для обеих кнопок
-        [sortByNameBtn, sortByWorksBtn, sortByUniquenessBtn].forEach(btn => {
+        // Сброс состояния для всех кнопок сортировки
+        [sortByNameBtn, sortByWorksBtn, sortByUniquenessBtn, sortByRandomBtn].forEach(btn => {
             btn.classList.remove('active');
-            btn.querySelector('.sort-arrow').textContent = '';
+            const arrow = btn.querySelector('.sort-arrow');
+            if (arrow) arrow.textContent = ''; // Убедимся, что стрелка существует
         });
-
         // Обновляем состояние блокировки контролов
         updateControlsState();
+        updateJumpToArtistHint(); // Обновляем состояние подсказки
         
         // Обновляем активную кнопку и стрелку
         let activeBtn;
@@ -901,22 +949,35 @@
             activeBtn = sortByNameBtn;
         } else if (sortType === 'works') {
             activeBtn = sortByWorksBtn;
-        } else { // uniqueness
+        } else if (sortType === 'uniqueness') {
             activeBtn = sortByUniquenessBtn;
+        } else if (sortType === 'random') {
+            activeBtn = sortByRandomBtn;
         }
-        
-        const arrow = activeBtn.querySelector('.sort-arrow');
-        activeBtn.classList.add('active');
-        arrow.textContent = sortDirection === 'asc' ? '▲' : '▼';
+
+        if (activeBtn) {
+            activeBtn.classList.add('active');
+            const arrow = activeBtn.querySelector('.sort-arrow');
+            // Показываем стрелку только для сортировок, у которых есть направление (asc/desc)
+            if (arrow && (sortType === 'name' || sortType === 'works')) {
+                arrow.textContent = sortDirection === 'asc' ? '▲' : '▼';
+            }
+        }
     }
 
     function handleSortClick(clickedType) {
-        // Если активируем "Uniqueness", сбрасываем все остальные фильтры
-        if (clickedType === 'uniqueness' && sortType !== 'uniqueness') {
+        // Если был активен "прыжок к художнику", сбрасываем его
+        if (isJumpingToArtist) {
+            startIndexOffset = 0;
+            isJumpingToArtist = false;
+        }
+
+        // Если активируем "Uniqueness" или "Random", сбрасываем все остальные фильтры
+        if ((clickedType === 'uniqueness' || clickedType === 'random') && sortType !== clickedType) {
             resetJumpState(false); // Сбрасываем "Jump"
             
             // Прямой сброс поиска вместо имитации клика для надежности
-            if (searchInput.value !== '') {
+            if (searchInput.value.trim() !== '') {
                 searchInput.value = '';
                 searchTerm = '';
                 clearSearchBtn.style.display = 'none';
@@ -925,12 +986,12 @@
 
         if (sortType === clickedType) {
             // Если кликнули по активной кнопке, меняем направление,
-            // но для 'uniqueness' направление всегда 'desc' и не меняется.
-            if (clickedType !== 'uniqueness') {
+            // но для 'uniqueness' и 'random' направление всегда 'desc' и не меняется.
+            if (clickedType !== 'uniqueness' && clickedType !== 'random') {
                 sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
             }
         } else {
-            // Если кликнули по новой кнопке, активируем ее
+            // Если кликнули по новой кнопке, активируем ее и устанавливаем направление по умолчанию
             sortType = clickedType;
             // Устанавливаем направление по умолчанию
             // Для 'name' - asc, для 'works' и 'uniqueness' - desc.
@@ -950,6 +1011,7 @@
     sortByNameBtn.addEventListener('click', () => handleSortClick('name'));
     sortByWorksBtn.addEventListener('click', () => handleSortClick('works'));
     sortByUniquenessBtn.addEventListener('click', () => handleSortClick('uniqueness'));
+    sortByRandomBtn.addEventListener('click', () => handleSortClick('random')); // Обработчик для новой кнопки
 
     // --- Конец управления сортировкой ---
 
@@ -1035,6 +1097,21 @@
     // Устанавливаем начальное состояние сортировки
     updateSortButtonsUI();
 
+    // --- Инициализация подсказки о "прыжке к художнику" ---
+    jumpToArtistHint.id = 'jump-to-artist-hint';
+    jumpToArtistHint.className = 'hotkey-hint';
+    jumpToArtistHint.style.display = 'none';
+    jumpToArtistHint.style.cursor = 'pointer';
+    jumpToArtistHint.title = 'Click to reset view';
+    jumpToArtistHint.innerHTML = 'Jumping to artist... <span>&times;</span>';
+    // Вставляем подсказку после блока поиска
+    // searchWrapper.parentNode.insertBefore(jumpToArtistHint, searchWrapper.nextSibling);
+
+    jumpToArtistHint.addEventListener('click', () => {
+        startIndexOffset = 0;
+        isJumpingToArtist = false;
+        renderView();
+    });
 
     initDB()
         .then(() => {
