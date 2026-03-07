@@ -21,6 +21,30 @@ body {
     padding: 20px;
 }
 
+/* --- Глобальная стилизация скроллбара --- */
+
+/* Firefox */
+html {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-color) transparent;
+}
+
+/* Webkit-браузеры (Chrome, Safari, Edge) */
+body::-webkit-scrollbar {
+    width: 12px; /* Делаем основной скроллбар чуть шире для удобства */
+}
+
+body::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+body::-webkit-scrollbar-thumb {
+    background-color: var(--border-color);
+    border-radius: 6px;
+    border: 3px solid var(--background-color); /* Отступ от края */
+    background-clip: padding-box;
+}
+
 .page-title-container {
     text-align: center;
     margin-bottom: 30px;
@@ -67,19 +91,8 @@ body {
     margin-bottom: 20px;
     /* Добавляем разделительную линию под табами */
     padding-bottom: 20px;
+    border-bottom: 1px solid var(--border-color);
     position: relative; /* Для позиционирования .author-credit на странице About */
-}
-
-/* Создаем полноэкранную линию с помощью псевдоэлемента */
-.header::after {
-    content: '';
-    position: absolute;
-    bottom: 0;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 100vw;
-    height: 1px;
-    background-color: var(--border-color);
 }
 
 .controls-container {
@@ -91,18 +104,7 @@ body {
     margin-bottom: 30px; /* Добавляем отступ снизу, чтобы отодвинуть галерею от линии */
     /* Добавляем нижнюю границу и отступы для создания разделительной линии */
     padding-bottom: 20px;
-}
-
-/* Создаем вторую полноэкранную линию */
-.controls-container::after {
-    content: '';
-    position: absolute;
-    bottom: 0;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 100vw;
-    height: 1px;
-    background-color: var(--border-color);
+    border-bottom: 1px solid var(--border-color);
 }
 
 .search-and-import-wrapper {
@@ -203,9 +205,22 @@ body {
 }
 
 /* Уменьшаем размер кнопки экспорта в TXT */
-#export-txt-btn {
+#export-txt-btn, #toggle-folders-btn {
     padding: 8px 12px;
     font-size: 13px;
+}
+
+/* Новый контейнер для кнопок экспорта и переключения папок */
+#favorites-actions-wrapper {
+    display: inline-flex;
+    border: 1px solid var(--border-color);
+    border-radius: var(--global-border-radius);
+    overflow: hidden;
+}
+
+#favorites-actions-wrapper .sort-button {
+    border: none;
+    border-radius: 0;
 }
 
 
@@ -545,6 +560,27 @@ input[type="range"]::-webkit-slider-thumb {
     transform: scale(1.03);
 }
 
+.card.selected {
+    box-shadow: 0 0 0 3px var(--accent-color), 0 4px 12px rgba(10, 132, 255, 0.3);
+    transform: scale(1.02); /* Слегка уменьшаем, чтобы не было слишком навязчиво */
+}
+
+.card.selected:hover {
+    transform: scale(1.04); /* Немного увеличиваем при наведении на уже выделенную */
+}
+
+.batch-drag-image {
+    /* Стили для "призрака" при перетаскивании группы, идентичные .folder-count */
+    position: absolute;
+    top: -1000px;
+    background-color: var(--accent-color);
+    color: #fff;
+    padding: 4px 12px;
+    border-radius: 16px;
+    font-weight: 700;
+    font-size: 14px;
+}
+
 .card__image {
     width: 100%;
     height: auto;
@@ -631,8 +667,14 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 .loader-container {
-    text-align: center;
-    padding: 20px;
+    position: fixed; /* Фиксируем относительно окна браузера */
+    bottom: 30px; /* Отступ снизу */
+    left: 50%; /* Центрируем по горизонтали */
+    transform: translateX(-50%); /* Точное центрирование */
+    padding: 10px; /* Небольшой внутренний отступ */
+    background-color: var(--card-background); /* Добавляем фон, чтобы было видно на карточках */
+    border-radius: 50%; /* Делаем фон круглым */
+    z-index: 1001; /* Устанавливаем выше, чем карточки, но ниже чем toast */
 }
 
 .loader {
@@ -692,6 +734,28 @@ input[type="range"]::-webkit-slider-thumb {
     transform: translateY(20px);
     transition: opacity 0.3s, visibility 0.3s, transform 0.3s;
     z-index: 999;
+}
+
+/* Контейнер для заголовка и галереи */
+.gallery-wrapper {
+    flex: 1; /* Этот контейнер будет занимать все доступное пространство */
+    display: flex;
+    flex-direction: column;
+}
+
+/* Заголовок над галереей (для имени папки) */
+.gallery-title {
+    text-align: left;
+    font-size: 22px;
+    font-weight: 600; /* Сделаем основной вес чуть легче */
+    color: var(--text-color); /* Название папки будет ярким */
+    margin-bottom: 20px;
+}
+
+.gallery-title-label {
+    font-weight: 500;
+    color: var(--secondary-text-color); /* Метка будет менее контрастной */
+    margin-right: 8px;
 }
 
 .scroll-to-top-btn.visible {
@@ -780,6 +844,11 @@ input[type="range"]::-webkit-slider-thumb {
     }
     /* Скрываем подсказку о свайп-режиме на мобильных */
     #swipe-continue-hint { display: none !important; }
+
+    /* Скрываем кнопку переключения папок на мобильных */
+    #toggle-folders-btn {
+        display: none;
+    }
 }
 @media (max-width: 768px) {
     body { padding: 10px; }
@@ -1164,4 +1233,303 @@ input[type="range"]::-webkit-slider-thumb {
     padding: 2px 8px;
     color: var(--text-color);
     box-shadow: 0 2px 0 rgba(0,0,0,0.2);
+}
+
+/* --- Main Content & Folders --- */
+#main-content {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+}
+
+.folders-panel-wrapper {
+    flex: 0 0 400px; /* Фиксированная ширина, не растягивается, не сжимается */
+    position: sticky; /* Делаем панель "липкой" */
+    top: 20px; /* Отступ сверху */
+    align-self: stretch; /* Растягиваем обертку на всю высоту flex-контейнера */
+    max-height: calc(100vh - 40px); /* Ограничиваем высоту панели и добавляем отступы */
+    display: flex; /* Добавляем flex, чтобы дочерний элемент мог растянуться на 100% */
+}
+
+.folders-panel {
+    background-color: var(--card-background);
+    border-radius: var(--global-border-radius);
+    border: 1px solid var(--border-color);
+    padding: 12px; /* Возвращаем симметричные отступы */
+    overflow: hidden; /* Убираем прокрутку с самой панели, она будет на внутреннем блоке */
+    display: flex; /* Используем flexbox для внутреннего расположения */
+    flex-direction: column; /* Элементы будут идти друг под другом */
+    /* Стилизация скроллбара для Firefox */
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-color) transparent;
+    height: 100%; /* Заставляем панель занимать всю высоту родителя-обертки */
+}
+
+.folders-header {
+    font-size: 18px;
+    font-weight: 700;
+    padding-left: 16px;
+    margin-bottom: 16px;
+    padding-bottom: 16px; /* Оставляем только отступ до разделительной линии */
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-color);
+}
+
+/* Подсказка в панели папок */
+.folders-hint {
+    font-size: 13px;
+    color: var(--text-color);
+    text-align: center;
+    padding: 0 16px 16px; /* Отступы, чтобы она была под заголовком и перед списком */
+    margin-bottom: 16px; /* Отступ до списка папок */
+    border-bottom: 1px solid var(--border-color); /* Разделительная линия */
+    line-height: 1.5;
+    font-weight: 600;
+}
+
+/* Стилизация "клавиш" в подсказке */
+.folders-hint kbd {
+    display: inline-block;
+    font-family: inherit;
+    font-weight: 600;
+    background-color: var(--border-color);
+    border: 1px solid var(--secondary-text-color);
+    border-radius: 4px;
+    padding: 2px 6px;
+    color: var(--text-color);
+    box-shadow: 0 1px 1px rgba(0,0,0,0.2);
+}
+
+/* Стилизация скроллбара для Webkit-браузеров (Chrome, Safari, Edge) */
+.folders-panel::-webkit-scrollbar {
+    width: 8px; /* Уменьшаем ширину скроллбара */
+}
+
+.folders-panel::-webkit-scrollbar-track {
+    background: transparent; /* Делаем фон трека прозрачным */
+    margin: 16px 0; /* Добавляем вертикальные отступы, чтобы скроллбар не прилегал к верху и низу */
+}
+
+.folders-panel::-webkit-scrollbar-thumb {
+    background-color: var(--border-color); /* Цвет ползунка */
+    border-radius: 4px; /* Скругляем углы */
+    border: 2px solid transparent; /* Создаем эффект отступа от края */
+    background-clip: padding-box;
+}
+
+.folders-panel::-webkit-scrollbar-thumb:hover {
+    background-color: var(--accent-color); /* Меняем цвет при наведении */
+}
+
+.folders-list-container {
+    display: grid; /* Изменено на grid */
+    grid-template-columns: repeat(2, 1fr); /* 2 колонки */
+    grid-auto-rows: min-content; /* Указываем, что высота строк зависит от контента */
+    gap: 10px;
+    overflow-y: auto; /* Прокрутка теперь здесь */
+    padding-right: 4px; /* Небольшой отступ, чтобы скроллбар не прилипал к карточкам */
+    margin-right: -4px; /* Компенсируем отступ, чтобы не нарушать центровку */
+}
+
+.folder-item {
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    border-radius: var(--global-border-radius);
+    background-color: var(--card-background);
+    cursor: pointer;
+    transition: box-shadow 0.2s ease-in-out, border-color 0.2s ease-in-out;
+    border: 1px solid transparent;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+
+    /* --- [CRITICAL RENDER FIX] НЕ УДАЛЯТЬ ЭТОТ БЛОК --- */
+    /* Следующие свойства исправляют баг WebKit/Blink (Chrome/Safari), */
+    /* когда при скролле и ленивой загрузке ломается border-radius (углы становятся квадратными). */
+    
+    /* 1. Принудительная маска для обрезки контента по скруглению */
+    -webkit-mask-image: -webkit-radial-gradient(white, black);
+    mask-image: radial-gradient(white, black);
+
+    /* 2. Вынос в отдельный композитный слой GPU, чтобы изолировать от перерисовки галереи */
+    transform: translateZ(0);
+    will-change: transform;
+    /* -------------------------------------------------- */
+}
+/* Стиль для активной папки */
+.folder-item.active {
+    border-color: var(--accent-color);
+    box-shadow: 0 0 15px rgba(10, 132, 255, 0.4);
+}
+
+/* Кнопка удаления папки */
+.folder-delete-btn {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    width: 24px;
+    height: 24px;
+    background-color: rgba(0, 0, 0, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 50%;
+    color: #fff;
+    font-size: 18px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 3; /* Выше градиента и миниатюры */
+    opacity: 0; /* Скрыта по умолчанию */
+    transform: scale(0.8);
+    transition: opacity 0.2s, transform 0.2s, background-color 0.2s;
+}
+.folder-item:hover .folder-delete-btn {
+    opacity: 1;
+    transform: scale(1);
+}
+.folder-delete-btn:hover {
+    background-color: #e53935; /* Красный цвет для действия удаления */
+    transform: scale(1.1);
+}
+/* Дополнительные стили для папки "Неотсортированное" */
+.folder-item--unsorted {
+    /* Убрали постоянную подсветку. Теперь она будет применяться только с классом .active */
+}
+
+/* Градиент для лучшей читаемости текста, перенесенный на саму карточку */
+.folder-item::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 50%;
+    background: linear-gradient(to top, rgba(0,0,0,0.7), transparent);
+    transition: background-color 0.2s ease-in-out; /* Плавный переход для подсветки */
+    z-index: 1;
+}
+
+/* Стили для режима переименования папки */
+.folder-item.is-renaming .folder-name {
+    opacity: 0; /* Скрываем старое имя */
+}
+
+.folder-item.is-renaming::after {
+    /* Усиливаем градиент для лучшего контраста с полем ввода */
+    background: linear-gradient(to top, rgba(0,0,0,0.9), transparent 80%);
+}
+
+
+.folder-item:hover {
+    /* Эффект увеличения теперь достигается масштабированием дочернего элемента */
+}
+
+/* Самый надежный способ: анимируем размер фона, а не геометрию элемента */
+.folder-item:hover .folder-item-thumbnail-container,
+.folder-item.drag-over .folder-item-thumbnail-container {
+    background-size: 105% 105%;
+}
+
+.folder-item.drag-over {
+    border-color: var(--accent-color);
+}
+
+.folder-item.drag-over {
+    /* Убираем изменение фона с самой карточки */
+}
+
+.folder-name {
+    position: absolute;
+    bottom: 8px;
+    left: 8px;
+    right: 8px;
+    color: #fff;
+    font-weight: 600;
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: left;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.7);
+    z-index: 2;
+}
+
+.folder-count {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 8px;
+    background-color: var(--accent-color);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    user-select: none;
+    z-index: 2;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+}
+
+.folder-item-thumbnail-container {
+    position: relative;
+    width: 100%;
+    height: 0;
+    padding-bottom: 146.1538%;
+    background-color: var(--border-color);
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    
+    border-radius: inherit;
+    transition: background-size 0.2s ease-in-out;
+
+    /* --- [SUB-PIXEL GAP FIX] НЕ УДАЛЯТЬ --- */
+    /* scale(1.005) перекрывает "щель" (1px line) внизу карточки, возникающую из-за */
+    /* ошибок субпиксельного рендеринга при наведении. Визуально незаметно, но убирает баг. */
+    transform: scale(1.005);
+    
+    transition: background-size 0.2s ease-in-out;
+    border-radius: inherit; /* Наследуем скругление */
+}
+
+.folder-item-thumbnail {
+    width: 100%;
+    height: 100%;
+    object-fit: cover; /* Меняем на cover для лучшего заполнения */
+    position: absolute; /* Позиционируем абсолютно внутри контейнера */
+    top: 0;
+    left: 0;
+    /* transition: transform 0.2s ease-in-out; */ /* Убираем transition отсюда */
+    z-index: 1; /* Убедимся, что основное изображение выше псевдоэлемента */
+    opacity: 0; /* Делаем основное изображение невидимым, так как фон теперь на родителе */
+}
+
+.add-folder-button {
+    /* Стилизуем кнопку как карточку-плейсхолдер */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    aspect-ratio: 832 / 1216; /* Оставляем для плейсхолдера, чтобы он не "прыгал" */
+    background-color: transparent;
+    border: 2px dashed var(--border-color);
+    border-radius: var(--global-border-radius);
+    color: var(--secondary-text-color);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-height: 0; /* Предотвращает растягивание в grid-контейнере */
+}
+
+.add-folder-button:hover {
+    border-color: var(--accent-color);
+    color: var(--accent-color);
+    background-color: rgba(10, 132, 255, 0.05);
 }

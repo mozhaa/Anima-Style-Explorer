@@ -18,6 +18,7 @@
     const favoritesControlsWrapper = document.getElementById('favorites-controls-wrapper');
     const styleCounter = document.getElementById('style-counter');
     const txtExportContainer = document.getElementById('txt-export-container');
+    const toggleFoldersBtn = document.getElementById('toggle-folders-btn');
     const importFavoritesInput = document.getElementById('import-favorites-input');
     const swipeContinueHint = document.getElementById('swipe-continue-hint'); // Новый элемент
     const jumpInput = document.getElementById('jump-input');
@@ -28,7 +29,9 @@
     const sortControls = document.querySelector('.sort-controls');
     const clearSearchBtn = document.getElementById('clear-search-btn');
     let allItems = [];
-    let itemsSortedByWorks = []; // Новый массив для быстрого поиска по работам
+    const galleryTitle = document.getElementById('gallery-title');
+    let itemsSortedByWorks = [];
+    let selectedArtists = new Map(); // Используем Map для хранения {id: timestamp} для сохранения порядка выбора
     let favorites = new Map(); // Используем Map для хранения {id: timestamp}
     let currentItems = [];
     let currentPage = 0; // Текущая страница для ленивой загрузки
@@ -44,7 +47,9 @@
     let previousSortDirection = null; // Для восстановления сортировки после "Jump"
     let jumpTimeout; // Таймер для отложенного перехода
     const SORT_TYPE_KEY = 'sortType';
+    const FOLDERS_PANEL_VISIBLE_KEY = 'foldersPanelVisible';
     let isJumpingToArtist = false; // Флаг для отслеживания состояния "прыжка"
+    let isFoldersPanelVisible = true; // Состояние видимости панели папок
     const SORT_DIRECTION_KEY = 'sortDirection';
 
     // --- Глобальные переменные для доступа из других скриптов ---
@@ -55,6 +60,9 @@
         get currentView() { return currentView; },
         get db() { return db; },
         get STORE_NAME() { return STORE_NAME; },
+        get selectedArtists() { return selectedArtists; }, // Экспортируем Map выделенных артистов
+        get allItems() { return allItems; }, // Добавляем allItems для доступа из folders.js
+        set db(value) { db = value; }, // Сеттер для обновления db из folders.js
         toggleFavorite,
         showToast,
         renderView,
@@ -80,7 +88,7 @@
 
     function initDB() {
         return new Promise((resolve, reject) => {
-            const request = indexedDB.open(DB_NAME, 2); // Увеличиваем версию для обновления схемы
+            const request = indexedDB.open(DB_NAME, 4); // Увеличиваем версию для обновления схемы
 
             request.onerror = () => {
                 console.error('IndexedDB error:', request.error);
@@ -93,14 +101,23 @@
             };
 
             request.onupgradeneeded = (event) => {
-                const db = event.target.result;
-                // Удаляем старое хранилище, если оно существует, чтобы избежать конфликтов
-                if (db.objectStoreNames.contains(STORE_NAME)) {
-                    db.deleteObjectStore(STORE_NAME);
+                const upgradeDb = event.target.result;
+                // Хранилище для избранного
+                if (!upgradeDb.objectStoreNames.contains(STORE_NAME)) {
+                    const favStore = upgradeDb.createObjectStore(STORE_NAME, { keyPath: 'id' });
+                    favStore.createIndex('timestamp', 'timestamp', { unique: false });
                 }
-                // Создаем новое хранилище с id в качестве ключа и индексом по временной метке
-                const objectStore = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
-                objectStore.createIndex('timestamp', 'timestamp', { unique: false });
+                // Хранилище для папок
+                if (!upgradeDb.objectStoreNames.contains('folders')) {
+                    const foldersStore = upgradeDb.createObjectStore('folders', { keyPath: 'id' });
+                    // Добавляем индексы для новых полей, если они нужны для запросов
+                    // Для lastArtistId и lastArtistImage индексы не обязательны, если мы их только отображаем
+                    foldersStore.createIndex('name', 'name', { unique: false }); // Индекс для сортировки по имени
+                }
+                // Хранилище для связи артистов и папок
+                if (!upgradeDb.objectStoreNames.contains('folder_artists')) {
+                    upgradeDb.createObjectStore('folder_artists', { keyPath: 'folderId' });
+                }
             };
         });
     }
@@ -174,6 +191,8 @@
         const card = document.createElement('div');
         card.className = 'card';
         card.dataset.artist = item.artist;
+        // Карточки можно перетаскивать в любой папке в разделе "Избранное"
+        card.draggable = currentView === 'favorites';
         card.dataset.id = item.id;
 
         const isFavorited = favorites.has(item.id);
@@ -222,19 +241,34 @@
 
         // Копирование имени по клику на карточку (кроме кнопки "избранное")
         card.addEventListener('click', (e) => {
-            if (!e.target.classList.contains('favorite-button')) {
-                navigator.clipboard.writeText('@' + item.artist).then(() => {
-                    showToast('Artist name copied to clipboard!');
-                });
+            // Если кликнули по кнопке "избранное", ничего не делаем
+            if (e.target.classList.contains('favorite-button')) {
+                return;
             }
-        });
 
+            // Улучшенная логика для производительности:
+            // Сначала проверяем на выделение, чтобы избежать лишних проверок.
+            if (currentView === 'favorites' && e.ctrlKey) {
+                toggleArtistSelection(item.id, card);
+                return; // Завершаем выполнение, чтобы не триггерить копирование.
+            }
+
+            // Во всех остальных случаях (простой клик в галерее или избранном) — копирование имени.
+            navigator.clipboard.writeText('@' + item.artist).then(() => {
+                showToast('Artist name copied to clipboard!');
+            });
+        });
         // Обработка клика по кнопке "избранное"
         const favButton = card.querySelector('.favorite-button');
         favButton.addEventListener('click', (e) => {
             e.stopPropagation(); // Предотвращаем копирование имени
             toggleFavorite(item, favButton);
         });
+
+        // Если карточка уже есть в наборе выделенных, применяем стиль
+        if (selectedArtists.has(item.id)) { // Проверяем наличие ключа в Map
+            card.classList.add('selected');
+        }
 
         return card;
     }
@@ -250,7 +284,7 @@
                     artist: item.name,
                     image: `${imageBasePath}images/${item.p}/${item.id}.webp`,
                     worksCount: item.post_count,
-                    id: item.id,
+                    id: String(item.id), // [FIX] Преобразуем ID в строку при загрузке
                     uniqueness_score: item.uniqueness_score
                 }));
 
@@ -266,6 +300,7 @@
 
             await loadFavoritesFromDB(); // Загружаем избранное из IndexedDB
             renderView();
+            window.appFolders.init(); // Инициализируем логику папок
         } catch (error) {
             console.error('Failed to load gallery data:', error);
             galleryContainer.innerHTML = '<p style="text-align: center; grid-column: 1 / -1;">Failed to load data.</p>';
@@ -275,8 +310,39 @@
     function renderView() {
         currentPage = 0;
         galleryContainer.innerHTML = '';
+        // Управляем видимостью панели папок в зависимости от состояния
+        if (currentView === 'favorites') {
+            if (isFoldersPanelVisible && window.innerWidth > 992) {
+                window.appFolders.showPanel();
+                galleryContainer.parentElement.style.flex = '1';
+
+                const { activeFolderId, getFolderName } = window.appFolders;
+                
+                if (galleryTitle && activeFolderId && getFolderName) {
+                    const folderName = getFolderName(activeFolderId);
+                    galleryTitle.innerHTML = `<span class="gallery-title-label">Folder:</span> ${folderName}`;
+                    galleryTitle.style.display = 'block';
+                }
+            } else {
+                window.appFolders.hidePanel();
+                galleryContainer.parentElement.style.flex = '';
+                if (galleryTitle) {
+                    galleryTitle.style.display = 'none';
+                }
+            }
+        } else {
+            window.appFolders.hidePanel();
+            galleryContainer.parentElement.style.flex = ''; // Сбрасываем flex
+            if (galleryTitle) {
+                galleryTitle.style.display = 'none'; // Скрываем заголовок в галерее
+            }
+        }
         // Обновляем UI контролов перед отрисовкой
         updateSortButtonsUI();
+
+        // Сбрасываем выделение при смене вида
+        clearSelection();
+
 
         // Добавляем или убираем класс для скрытия счетчика работ
         if (sortType === 'uniqueness') {
@@ -357,8 +423,45 @@
         // 2. Фильтруем по избранному, если нужно (до поиска, чтобы поиск работал по избранным)
         if (currentView === 'favorites') {
             sortedItems = sortedItems.filter(item => favorites.has(item.id));
-            // Сортируем избранное по временной метке (новые сверху)
-            sortedItems.sort((a, b) => favorites.get(b.id) - favorites.get(a.id));
+
+            // --- Фильтрация по папкам работает только на десктопе ---
+            if (window.innerWidth > 992) {
+                const { activeFolderId, getArtistIdsInFolder, getUnsortedArtistIds } = window.appFolders;
+
+                if (activeFolderId && getArtistIdsInFolder && getUnsortedArtistIds) {
+                    let artistIdsForFolder;
+
+                    if (activeFolderId === 'unsorted') {
+                        artistIdsForFolder = getUnsortedArtistIds(); // Возвращает Set
+                    } else {
+                        artistIdsForFolder = getArtistIdsInFolder(activeFolderId); // Возвращает Array
+                    }
+
+                    if (artistIdsForFolder) {
+                        const artistIdsToShow = new Set(artistIdsForFolder); // Гарантированно создаем Set
+                        sortedItems = sortedItems.filter(item => artistIdsToShow.has(item.id));
+                    }
+                }
+            }
+
+            // После фильтрации по папке, нам нужно отсортировать `sortedItems`
+            // в том же порядке, в котором `getArtistIdsInFolder` вернул ID.
+            const { activeFolderId, getArtistIdsInFolder } = window.appFolders;
+            if (window.innerWidth > 992 && activeFolderId && activeFolderId !== 'unsorted') {
+                const orderedArtistIds = getArtistIdsInFolder(activeFolderId); // Этот массив уже отсортирован по дате добавления в папку
+                const orderMap = new Map(orderedArtistIds.map((id, index) => [id, index]));
+                sortedItems.sort((a, b) => {
+                    return (orderMap.get(a.id) ?? Infinity) - (orderMap.get(b.id) ?? Infinity);
+                });
+            } else {
+                // Для мобильной версии или папки "Unsorted" оставляем старую логику сортировки
+                // по общей дате добавления в избранное.
+                sortedItems.sort((a, b) => {
+                    const timestampA = favorites.get(a.id) || 0;
+                    const timestampB = favorites.get(b.id) || 0;
+                    return timestampB - timestampA;
+                });
+            }
         }
 
         // 3. Фильтруем по строке поиска
@@ -385,7 +488,13 @@
                 if (favorites.size > 0 && searchTerm) {
                     p.innerText = `No artists found for "${searchTerm}" in your favorites.`;
                 } else {
-                    p.innerText = 'You have no favorites yet.';
+                    // Проверяем, выбрана ли папка
+                    const { activeFolderId } = window.appFolders;
+                    if (activeFolderId && activeFolderId !== 'unsorted') {
+                        p.innerText = 'This folder is empty. Drag and drop artists here!';
+                    } else {
+                        p.innerText = 'You have no favorites yet.';
+                    }
                 }
             } else if (searchTerm) { // Только для вида "Gallery" с активным поиском
                 p.innerText = `No artists found for "${searchTerm}".`;
@@ -464,6 +573,11 @@
                 button.setAttribute('aria-label', 'Add to favorites');
                 button.classList.remove('favorited');
             }
+            // Сообщаем модулю папок, что избранное было удалено,
+            // чтобы он мог обновить свои данные (счетчики, миниатюры).
+            if (window.appFolders && window.appFolders.handleFavoriteRemoval) {
+                window.appFolders.handleFavoriteRemoval(item.id);
+            }
         } else {
             // Добавить в избранное
             const favItem = { id: item.id, timestamp: Date.now() };
@@ -515,7 +629,7 @@
         const cards = galleryContainer.querySelectorAll('.card');
         cards.forEach(card => {
             const cardId = card.dataset.id;
-            const favButton = card.querySelector('.favorite-button');
+            const favButton = card.querySelector('.favorite-button'); // ID уже строка из dataset
             if (cardId && favButton && !favButton.classList.contains('remove-favorite')) {
                 const isFavorited = favorites.has(cardId);
                 favButton.classList.toggle('favorited', isFavorited);
@@ -524,6 +638,21 @@
                 favButton.setAttribute('aria-label', newTitle);
             }
         });
+    }
+
+    function toggleArtistSelection(artistId, cardElement) {
+        if (selectedArtists.has(artistId)) {
+            selectedArtists.delete(artistId);
+            cardElement.classList.remove('selected');
+        } else {
+            selectedArtists.set(artistId, Date.now()); // Добавляем в Map с временной меткой
+            cardElement.classList.add('selected');
+        }
+    }
+
+    function clearSelection() {
+        selectedArtists.clear();
+        document.querySelectorAll('.card.selected').forEach(c => c.classList.remove('selected'));
     }
 
     function showToast(message) {
@@ -613,6 +742,7 @@
         // Очищаем поиск при переключении на галерею
         if (searchInput.value) {
             searchInput.value = '';
+            clearSelection();
             searchInput.dispatchEvent(new Event('input', { bubbles: true }));
         }
     });
@@ -622,8 +752,11 @@
         if (currentView === 'favorites') return;
         setActiveTab(tabFavorites);
         favoritesControlsWrapper.style.display = 'flex'; // Показываем кнопки импорта/экспорта
-        txtExportContainer.style.display = 'flex';
-        swipeContinueHint.style.display = 'block'; // Показываем подсказку
+        txtExportContainer.style.display = 'flex'; // Показываем экспорт в TXT
+        // Подсказку о переходе в галерею показываем только на десктопе
+        if (window.innerWidth > 992) {
+            swipeContinueHint.style.display = 'block';
+        }
         jumpControls.style.display = 'none';
         searchInput.parentElement.style.borderBottom = 'none'; // Убираем разделитель, т.к. поле Jump скрыто
         swipeLaunchControls.style.display = 'none';
@@ -641,13 +774,46 @@
         // Также сбрасываем состояние перехода и разблокируем другие контролы
         resetJumpState(false); // false - чтобы не вызывать renderView() повторно
 
+        // Сбрасываем активную папку только на десктопе
+        if (window.innerWidth > 992) {
+            if (window.appFolders && window.appFolders.setActiveFolder) {
+                window.appFolders.setActiveFolder('unsorted', false); // false - не вызывать renderView
+            }
+        }
+
         // Очищаем поиск при переключении на избранное
         if (searchInput.value) {
             searchInput.value = '';
+            clearSelection();
             searchInput.dispatchEvent(new Event('input', { bubbles: true }));
         }
 
         renderView();
+    });
+
+    function updateToggleFoldersButton() {
+        toggleFoldersBtn.textContent = isFoldersPanelVisible ? 'Close Folders' : 'Open Folders';
+    }
+
+    toggleFoldersBtn.addEventListener('click', () => {
+        isFoldersPanelVisible = !isFoldersPanelVisible;
+        localStorage.setItem(FOLDERS_PANEL_VISIBLE_KEY, isFoldersPanelVisible);
+
+        if (isFoldersPanelVisible) {
+            window.appFolders.showPanel();
+            toggleFoldersBtn.textContent = 'Close Folders';
+            galleryContainer.parentElement.style.flex = '1';
+            if (galleryTitle) {
+                galleryTitle.style.display = 'block';
+            }
+        } else {
+            window.appFolders.hidePanel();
+            toggleFoldersBtn.textContent = 'Open Folders';
+            galleryContainer.parentElement.style.flex = '';
+            if (galleryTitle) {
+                galleryTitle.style.display = 'none';
+            }
+        }
     });
 
     // --- Сохранение избранных в файл ---
@@ -669,30 +835,75 @@
         reader.onload = async (e) => {
             try {
                 const data = JSON.parse(e.target.result);
+                // 1. Проверяем и импортируем основной список избранного (обратная совместимость)
                 if (!data.favorites || !Array.isArray(data.favorites)) {
                     throw new Error('Invalid file format');
                 }
 
                 let importedCount = 0;
-                const transaction = db.transaction(STORE_NAME, 'readwrite');
-                const store = transaction.objectStore(STORE_NAME);
+                const favTransaction = db.transaction(STORE_NAME, 'readwrite');
+                const favStore = favTransaction.objectStore(STORE_NAME);
 
                 data.favorites.forEach(fav => {
                     // Проверяем, что ID существует и его еще нет в избранном
                     if (fav.id && fav.timestamp && !favorites.has(String(fav.id))) {
-                        store.put({ id: String(fav.id), timestamp: fav.timestamp });
+                        favStore.put({ id: String(fav.id), timestamp: fav.timestamp });
                         importedCount++;
                     }
                 });
 
-                await new Promise(resolve => transaction.oncomplete = resolve);
+                await new Promise(resolve => favTransaction.oncomplete = resolve);
                 await loadFavoritesFromDB(); // Перезагружаем избранное из БД
-                renderView(); // Обновляем отображение
-                // Обновляем счетчик после импорта
-                styleCounter.innerHTML = `Styles in Favorites: <span class="style-count-number">${favorites.size.toLocaleString('en-US')}</span>`;
+
+                // 2. Проверяем и импортируем данные о папках (для новых версий)
+                if (data.folderData && Array.isArray(data.folderData.folders) && typeof data.folderData.folderArtists === 'object') {
+                    const { folders, folderArtists } = data.folderData;
+                    const folderTx = db.transaction(['folders', 'folder_artists'], 'readwrite');
+                    const foldersStore = folderTx.objectStore('folders');
+                    const folderArtistsStore = folderTx.objectStore('folder_artists');
+
+                    // Очищаем старые данные о папках перед импортом
+                    foldersStore.clear();
+                    folderArtistsStore.clear();
+
+                    // Импортируем новые папки
+                    folders.forEach(folder => {
+                        // Проверяем, что все необходимые поля присутствуют
+                        if (folder.id && folder.name) {
+                            foldersStore.put(folder);
+                        }
+                    });
+
+                    // Импортируем связи артистов и папок
+                    for (const [folderId, artistIds] of Object.entries(folderArtists)) {
+                        if (folderId && Array.isArray(artistIds)) {
+                            // Преобразуем в новый формат {id, added}
+                            // Используем обратный индекс как псевдо-timestamp для сохранения порядка
+                            const now = Date.now();
+                            const newArtistData = artistIds.map((id, index) => ({
+                                id: id,
+                                added: now - index 
+                            }));
+                            folderArtistsStore.put({ folderId, artistIds: newArtistData });
+                        }
+                    }
+
+                    await new Promise(resolve => folderTx.oncomplete = resolve);
+                    // Перезагружаем данные папок в модуле folders.js
+                    if (window.appFolders && window.appFolders.loadData) {
+                        await window.appFolders.loadData();
+                    }
+                }
+
+                // 3. Обновляем UI после всех операций
                 showToast(importedCount > 0 
                     ? `${importedCount} new favorites imported!`
                     : 'No new favorites to import.');
+                renderView(); // Обновляем основной вид
+                // Обновляем счетчик избранных, если мы находимся на этой вкладке
+                if (currentView === 'favorites') {
+                    styleCounter.innerHTML = `Styles in Favorites: <span class="style-count-number">${favorites.size.toLocaleString('en-US')}</span>`;
+                }
 
             } catch (error) {
                 console.error('Error importing favorites:', error);
@@ -722,7 +933,24 @@
                 exportDate: new Date().toISOString(),
                 favoritesCount: favoritesToSave.length
             },
-            favorites: favoritesToSave
+            favorites: favoritesToSave,
+            // Добавляем новый блок для данных о папках
+            folderData: null
+        };
+
+        // Получаем данные о папках из модуля folders.js
+        if (window.appFolders) {
+            const folders = window.appFolders.folders; // Массив папок
+            const folderArtists = window.appFolders.folderArtists; // Map<folderId, artistId[]>
+
+            if (folders && folderArtists) {
+                // Преобразуем Map в простой объект для JSON-сериализации
+                const folderArtistsObj = Object.fromEntries(folderArtists.entries());
+                exportData.folderData = {
+                    folders: folders,
+                    folderArtists: folderArtistsObj
+                };
+            }
         };
 
         const jsonString = JSON.stringify(exportData, null, 2);
@@ -747,26 +975,42 @@
             return;
         }
 
-        // 1. Получаем ID избранных и сортируем их по дате добавления (новые сверху)
-        const sortedFavoriteIds = Array.from(favorites.entries())
-            .sort(([, timestampA], [, timestampB]) => timestampB - timestampA)
-            .map(([id]) => id);
+        let artistIdsToExport = [];
+        let folderName = 'all';
+
+        // На десктопе экспортируем только из активной папки
+        if (window.innerWidth > 992 && window.appFolders) {
+            const { activeFolderId, getArtistIdsInFolder, getUnsortedArtistIds, getFolderName } = window.appFolders;
+            if (activeFolderId === 'unsorted') {
+                artistIdsToExport = Array.from(getUnsortedArtistIds());
+                // Сортируем по дате добавления в избранное (новые сверху)
+                artistIdsToExport.sort((a, b) => (favorites.get(b) || 0) - (favorites.get(a) || 0));
+            } else {
+                // getArtistIdsInFolder уже возвращает отсортированный по дате массив ID
+                artistIdsToExport = getArtistIdsInFolder(activeFolderId);
+            }
+            folderName = getFolderName(activeFolderId).replace(/\s+/g, '-').toLowerCase(); // Для имени файла
+        } else {
+            // На мобильных устройствах экспортируем всё избранное
+            artistIdsToExport = Array.from(favorites.keys())
+                .sort((a, b) => (favorites.get(b) || 0) - (favorites.get(a) || 0));
+        }
 
         // 2. Находим имена художников по их ID
-        const artistNames = sortedFavoriteIds.map(id => {
+        const artistNames = artistIdsToExport.map(id => {
             const artistData = allItems.find(item => item.id === id);
             return artistData ? artistData.artist : null;
         }).filter(Boolean); // Убираем null, если художник не был найден
 
         // 3. Создаем текстовый файл
         const textContent = artistNames.join('\n');
-        const blob = new Blob([textContent], { type: 'text/plain;charset=utf-8' });
+        const blob = new Blob([textContent], { type: 'text/plain;charset=utf-8' }); // Используем BOM для корректного отображения в Блокноте
         const url = URL.createObjectURL(blob);
 
         const a = document.createElement('a');
         a.href = url;
         const date = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-        a.download = `anima-style-favorites-artists-${date}.txt`;
+        a.download = `anima-favorites-${folderName}-${date}.txt`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -786,6 +1030,7 @@
         }
 
         searchTerm = newSearchTerm;
+        if (isSearching) clearSelection(); // Сбрасываем выделение при поиске
         updateControlsState(); // Обновляем состояние контролов
         renderView();
     });
@@ -1094,6 +1339,15 @@
         sortDirection = savedSortDirection;
     }
 
+    // Загружаем и применяем сохраненное состояние видимости панели папок
+    const savedFoldersVisible = localStorage.getItem(FOLDERS_PANEL_VISIBLE_KEY);
+    if (savedFoldersVisible !== null) {
+        isFoldersPanelVisible = savedFoldersVisible === 'true';
+    }
+
+    // Устанавливаем правильный текст на кнопке при загрузке
+    updateToggleFoldersButton();
+
     // Устанавливаем начальное состояние сортировки
     updateSortButtonsUI();
 
@@ -1110,6 +1364,7 @@
     jumpToArtistHint.addEventListener('click', () => {
         startIndexOffset = 0;
         isJumpingToArtist = false;
+        clearSelection();
         renderView();
     });
 

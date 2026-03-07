@@ -76,7 +76,10 @@
             </div>
             <!-- Контейнер для кнопки экспорта в TXT (возвращаем в левый блок) -->
             <div id="txt-export-container" class="sort-buttons-group" style="display: none;">
-                <button id="export-txt-btn" class="sort-button" title="Export artist names to a .txt file">Export Favorites (.txt)</button>
+                <div id="favorites-actions-wrapper">
+                    <button id="toggle-folders-btn" class="sort-button" title="Toggle folders panel visibility">Close Folders</button>
+                    <button id="export-txt-btn" class="sort-button" title="Export artist names to a .txt file">Export .txt</button>
+                </div>
             </div>
         </div>
         <div class="search-and-import-wrapper">
@@ -118,7 +121,20 @@
     </div>
 
 
-    <main id="gallery-container" class="gallery-grid"></main>
+    <main id="main-content">
+        <div id="folders-panel-wrapper" class="folders-panel-wrapper" style="display: none;">
+            <div id="folders-panel" class="folders-panel">
+                <div class="folders-header">Folders</div>
+                <p class="folders-hint">Drag a card to move.<br>Use <kbd>Ctrl+Click</kbd> to select multiple, then drag.</p>
+                <div id="folders-list" class="folders-list-container"></div>
+                <button id="add-folder-btn" class="add-folder-button">+ New Folder</button>
+            </div>
+        </div>
+        <div class="gallery-wrapper">
+            <h2 id="gallery-title" class="gallery-title" style="display: none;"></h2>
+            <div id="gallery-container" class="gallery-grid"></div>
+        </div>
+    </main>
 
     <div id="loader" class="loader-container" style="display: none;">
         <div class="loader"></div>
@@ -155,5 +171,6 @@
     <script src="app/data.js?v=21"></script>
     <script src="app/app.js?v=21"></script>
     <script src="app/swipe-mode.js?v=21"></script>
+    <script src="app/folders.js?v=21"></script>
 </body>
 </html>
