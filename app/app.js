@@ -30,8 +30,7 @@
     const clearSearchBtn = document.getElementById('clear-search-btn');
     let allItems = [];
     const galleryTitle = document.getElementById('gallery-title');
-    let itemsSortedByWorks = [];
-    let selectedArtists = new Map(); // Используем Map для хранения {id: timestamp} для сохранения порядка выбора
+    let itemsSortedByWorks = []; 
     let favorites = new Map(); // Используем Map для хранения {id: timestamp}
     let currentItems = [];
     let currentPage = 0; // Текущая страница для ленивой загрузки
@@ -59,8 +58,7 @@
         get searchTerm() { return searchTerm; },
         get currentView() { return currentView; },
         get db() { return db; },
-        get STORE_NAME() { return STORE_NAME; },
-        get selectedArtists() { return selectedArtists; }, // Экспортируем Map выделенных артистов
+        get STORE_NAME() { return STORE_NAME; }, 
         get allItems() { return allItems; }, // Добавляем allItems для доступа из folders.js
         set db(value) { db = value; }, // Сеттер для обновления db из folders.js
         toggleFavorite,
@@ -246,29 +244,16 @@
                 return;
             }
 
-            // Улучшенная логика для производительности:
-            // Сначала проверяем на выделение, чтобы избежать лишних проверок.
-            if (currentView === 'favorites' && e.ctrlKey) {
-                toggleArtistSelection(item.id, card);
-                return; // Завершаем выполнение, чтобы не триггерить копирование.
-            }
-
-            // Во всех остальных случаях (простой клик в галерее или избранном) — копирование имени.
+            // Копирование имени.
             navigator.clipboard.writeText('@' + item.artist).then(() => {
                 showToast('Artist name copied to clipboard!');
             });
         });
-        // Обработка клика по кнопке "избранное"
         const favButton = card.querySelector('.favorite-button');
         favButton.addEventListener('click', (e) => {
             e.stopPropagation(); // Предотвращаем копирование имени
             toggleFavorite(item, favButton);
         });
-
-        // Если карточка уже есть в наборе выделенных, применяем стиль
-        if (selectedArtists.has(item.id)) { // Проверяем наличие ключа в Map
-            card.classList.add('selected');
-        }
 
         return card;
     }
@@ -339,9 +324,6 @@
         }
         // Обновляем UI контролов перед отрисовкой
         updateSortButtonsUI();
-
-        // Сбрасываем выделение при смене вида
-        clearSelection();
 
 
         // Добавляем или убираем класс для скрытия счетчика работ
@@ -640,21 +622,6 @@
         });
     }
 
-    function toggleArtistSelection(artistId, cardElement) {
-        if (selectedArtists.has(artistId)) {
-            selectedArtists.delete(artistId);
-            cardElement.classList.remove('selected');
-        } else {
-            selectedArtists.set(artistId, Date.now()); // Добавляем в Map с временной меткой
-            cardElement.classList.add('selected');
-        }
-    }
-
-    function clearSelection() {
-        selectedArtists.clear();
-        document.querySelectorAll('.card.selected').forEach(c => c.classList.remove('selected'));
-    }
-
     function showToast(message) {
         const toast = document.getElementById('toast-notification');
         if (message) toast.textContent = message;
@@ -742,7 +709,6 @@
         // Очищаем поиск при переключении на галерею
         if (searchInput.value) {
             searchInput.value = '';
-            clearSelection();
             searchInput.dispatchEvent(new Event('input', { bubbles: true }));
         }
     });
@@ -784,7 +750,6 @@
         // Очищаем поиск при переключении на избранное
         if (searchInput.value) {
             searchInput.value = '';
-            clearSelection();
             searchInput.dispatchEvent(new Event('input', { bubbles: true }));
         }
 
@@ -1024,7 +989,6 @@
         }
 
         searchTerm = newSearchTerm;
-        if (isSearching) clearSelection(); // Сбрасываем выделение при поиске
         updateControlsState(); // Обновляем состояние контролов
         renderView();
     });
@@ -1358,7 +1322,6 @@
     jumpToArtistHint.addEventListener('click', () => {
         startIndexOffset = 0;
         isJumpingToArtist = false;
-        clearSelection();
         renderView();
     });
 

@@ -345,20 +345,7 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             item.classList.remove('drag-over');
             const data = e.dataTransfer.getData('application/json');
-            const folderId = folder.id;
-
-            if (data.startsWith('batch:')) {
-                try {
-                    const artistIds = JSON.parse(data.substring(6));
-                    addArtistsToFolder(folderId, artistIds);
-                } catch (err) {
-                    console.error("Failed to parse batch artist IDs", err);
-                    window.appGlobals.showToast('Error moving artists.');
-                }
-            } else {
-                // Одиночное перемещение
-                addArtistToFolder(folderId, data);
-            }
+            addArtistToFolder(folder.id, data);
         });
 
         return item;
@@ -506,6 +493,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 const store = transaction.objectStore(FOLDER_ARTISTS_STORE_NAME);
                 if (artistIdArray.length > 0) {
                     store.put({ folderId, artistIds: artistIdArray });
+                    transaction.oncomplete = () => {
+                        // После успешного обновления данных в БД, перерисовываем панель
+                        // чтобы обновить счетчик и, возможно, миниатюру.
+                        renderFolders();
+                    };
                 } else {
                     store.delete(folderId); // Удаляем запись, если папка стала пустой
                 }
@@ -519,13 +511,16 @@ document.addEventListener('DOMContentLoaded', () => {
         // Если папка-источник была найдена и это не "Unsorted"
         if (sourceFolderData) {
             // Обновляем ее миниатюру, так как последний добавленный художник мог быть удален
-            const artistIdArray = folderArtists.get(sourceFolderData.id);
-            if (artistIdArray && artistIdArray.length > 0) {
-                const lastArtistId = artistIdArray.sort((a, b) => b.added - a.added)[0].id;
-                updateFolderThumbnail(sourceFolderData.id, lastArtistId, renderFolders);
-            } else {
-                // Если папка стала пустой, убираем миниатюру
-                updateFolderThumbnail(sourceFolderData.id, null, renderFolders);
+            const artistIdArrayForSource = folderArtists.get(sourceFolderData.id);
+            if (artistIdArrayForSource) {
+                if (artistIdArrayForSource.length > 0) {
+                    // Находим ID последнего добавленного артиста для обновления миниатюры
+                    const lastArtistId = artistIdArrayForSource.sort((a, b) => b.added - a.added)[0].id;
+                    updateFolderThumbnail(sourceFolderData.id, lastArtistId);
+                } else {
+                    // Если папка стала пустой, убираем миниатюру
+                    updateFolderThumbnail(sourceFolderData.id, null);
+                }
             }
         }
         return sourceFolderId;
@@ -592,78 +587,6 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
-    function addArtistsToFolder(folderId, artistIds) {
-        if (!artistIds || artistIds.length === 0) return;
-
-        const destinationFolderData = folders.find(f => f.id === folderId);
-        if (!destinationFolderData) return;
-
-        let movedCount = 0; // Счетчик реально перемещенных артистов
-        const artistsToMove = [];
-
-        // 1. Подготовка данных и транзакций
-        artistIds.forEach(artistId => {
-            const artistIdStr = String(artistId); // Убедимся, что ID - строка
-            if (folderArtists.get(folderId)?.some(item => item.id === artistIdStr)) {
-                return; // Пропускаем, если артист уже в этой папке
-            }
-            removeArtistFromPreviousFolder(artistIdStr);
-            artistsToMove.push(artistIdStr); // Добавляем в список на перемещение
-            movedCount++;
-        });
-
-        if (movedCount === 0) {
-            window.appGlobals.showToast('Selected artists are already in this folder.');
-            return;
-        }
-
-        if (!folderArtists.has(folderId)) {
-            folderArtists.set(folderId, []);
-        }
-        const artistArray = folderArtists.get(folderId);
-        const now = Date.now();
-
-        // 2. Создаем массив новых артистов с убывающими таймстемпами, чтобы сохранить порядок
-        const newArtistsData = artistsToMove.map((id, index) => ({
-            id: String(id),
-            added: now - index // Первый выбранный (index 0) получит самый большой timestamp
-        }));
-
-        // 3. Сохранение изменений в IndexedDB
-        const updatedArtistArray = [...newArtistsData, ...artistArray];
-        const folderArtistsTransaction = db.transaction(FOLDER_ARTISTS_STORE_NAME, 'readwrite');
-        folderArtistsTransaction.objectStore(FOLDER_ARTISTS_STORE_NAME).put({ folderId, artistIds: updatedArtistArray });
-        folderArtists.set(folderId, updatedArtistArray); // Обновляем данные в памяти
-        folderArtistsTransaction.oncomplete = () => {
-            // 4. Обновление миниатюры папки (используем ПЕРВОГО артиста из списка)
-            const lastArtistId = String(artistsToMove[0]);
-
-            updateFolderThumbnail(folderId, lastArtistId, () => {
-                // 5. Перерисовка панели папок для обновления всех счетчиков
-                renderFolders();
-
-                // 6. Плавное удаление всех перемещенных карточек из DOM
-                artistIds.forEach(artistId => {
-                    const cardToRemove = galleryContainer.querySelector(`.card[data-id="${artistId}"]`);
-                    if (cardToRemove) {
-                        cardToRemove.style.transition = 'opacity 0.3s ease, transform 0.3s ease, max-height 0.3s ease 0.1s, margin 0.3s ease 0.1s, padding 0.3s ease 0.1s';
-                        cardToRemove.style.opacity = '0';
-                        cardToRemove.style.transform = 'scale(0.9)';
-                        cardToRemove.style.maxHeight = '0px';
-                        cardToRemove.style.margin = '0';
-                        cardToRemove.style.padding = '0';
-                        cardToRemove.addEventListener('transitionend', () => cardToRemove.remove(), { once: true });
-                    }
-                });
-
-                // 7. Сброс выделения и показ уведомления
-                window.appGlobals.showToast(`Moved ${movedCount} artist(s) to "${destinationFolderData.name}"`);
-                // Функция clearSelection будет вызвана из app.js
-                document.dispatchEvent(new CustomEvent('clear-selection'));
-            });
-        };
-    }
-
     function updateFolderThumbnail(folderId, artistId, onCompleteCallback) {
         const transaction = db.transaction(FOLDERS_STORE_NAME, 'readwrite');
         const store = transaction.objectStore(FOLDERS_STORE_NAME);
@@ -694,59 +617,24 @@ document.addEventListener('DOMContentLoaded', () => {
     galleryContainer.addEventListener('dragstart', (e) => {
         const card = e.target.closest('.card');
         if (!card || window.appGlobals.currentView !== 'favorites') return;
-
-        // Получаем Map выбранных артистов из app.js
-        const selectedArtistsMap = window.appGlobals.selectedArtists;
-        // Сортируем ID по времени выбора (от старого к новому)
-        const selectedArtistIds = Array.from(selectedArtistsMap.entries())
-                                       .sort((a, b) => a[1] - b[1])
-                                       .map(entry => entry[0]);
-
-        const isDraggingSelection = selectedArtistIds.length > 0 && selectedArtistIds.includes(card.dataset.id);
-
-        if (isDraggingSelection) {
-            // Перетаскиваем группу
-            e.dataTransfer.setData('application/json', `batch:${JSON.stringify(selectedArtistIds)}`);
-
-            // Создаем кастомное изображение для перетаскивания
-            const dragImage = document.createElement('div');
-            dragImage.className = 'folder-count batch-drag-image'; // Используем стиль счетчика
-            dragImage.textContent = `+${selectedArtistIds.length}`;
-            dragImage.style.position = 'absolute';
-            dragImage.style.top = '-1000px'; // Прячем за экраном
-            document.body.appendChild(dragImage);
-            e.dataTransfer.setDragImage(dragImage, 15, 15); // Смещаем, чтобы было под курсором
-
-            // Удаляем элемент после начала перетаскивания
-            setTimeout(() => document.body.removeChild(dragImage), 0);
-
-        } else {
-            // Одиночное перетаскивание: сбрасываем выделение
-            document.dispatchEvent(new CustomEvent('clear-selection'));
-            e.dataTransfer.setData('application/json', card.dataset.id);
-        }
+        
+        // Одиночное перетаскивание
+        e.dataTransfer.setData('application/json', card.dataset.id);
         e.dataTransfer.effectAllowed = 'move';
     });
 
-    // Глобальный слушатель для сброса выделения
-    document.addEventListener('clear-selection', () => {
-        document.querySelectorAll('.card.selected').forEach(c => c.classList.remove('selected'));
-        // В app.js тоже нужно будет очистить Set, создадим там функцию
-    });
-
-    // Слушатель для сброса выделения по клику вне карточек
-    document.addEventListener('click', (e) => {
-        if (!e.target.closest('.card') && !e.target.closest('.folders-panel')) {
-             document.dispatchEvent(new CustomEvent('clear-selection'));
-        }
-    });
-
-    function getFolderName(folderId, returnOldNameAfterDeletion = false) {
+    /**
+     * Gets the name of a folder by its ID.
+     * @param {string} folderId The ID of the folder.
+     * @param {object} [options] Optional parameters.
+     * @param {boolean} [options.returnOldNameAfterDeletion=false] If true, returns a placeholder name if the folder was just deleted from memory but the name is needed for a toast message.
+     * @returns {string} The name of the folder or an empty string.
+     */
+    function getFolderName(folderId, { returnOldNameAfterDeletion = false } = {}) {
         if (folderId === 'unsorted') {
             return 'Unsorted';
         }
-        // Если папка уже удалена, мы не сможем найти ее в `folders`
-        const folder = folders.find(f => f.id === folderId) || (returnOldNameAfterDeletion ? { name: 'Deleted Folder' } : null);
+        const folder = folders.find(f => f.id === folderId);
         return folder ? folder.name : '';
     }
 
@@ -756,12 +644,8 @@ document.addEventListener('DOMContentLoaded', () => {
      * @param {string} artistId ID удаленного из избранного артиста.
      */
     function handleFavoriteRemoval(artistId) {
-        const sourceFolderId = removeArtistFromPreviousFolder(artistId);
-
-        // Если артист не был ни в одной папке (был в Unsorted), то просто перерисовываем
-        if (!sourceFolderId) {
-            renderFolders();
-        }
+        removeArtistFromPreviousFolder(artistId);
+        renderFolders(); // Всегда перерисовываем панель для обновления папки "Unsorted"
     }
 
     // --- Экспорт для app.js ---
@@ -780,7 +664,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return items.sort((a, b) => b.added - a.added).map(item => item.id);
         },
         getUnsortedArtistIds: getUnsortedArtistIds,
-        getFolderName: getFolderName,
+        getFolderName: (folderId, returnOldName) => getFolderName(folderId, { returnOldNameAfterDeletion: returnOldName }),
         handleFavoriteRemoval: handleFavoriteRemoval,
         get folders() { return folders; }, // Экспортируем массив папок
         get folderArtists() { return folderArtists; }, // Экспортируем Map связей
