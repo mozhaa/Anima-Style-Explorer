@@ -194,9 +194,9 @@ body::-webkit-scrollbar-thumb {
 
 .sort-jump-group {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     gap: 15px;
-    width: 270px; /* Увеличиваем ширину, чтобы вместить кнопки сортировки */
+    justify-content: center;
 }
 /* Контейнер для кнопки экспорта TXT, который теперь в левой колонке */
 #txt-export-container {
@@ -1521,4 +1521,115 @@ input[type="range"]::-webkit-slider-thumb {
     border-color: var(--accent-color);
     color: var(--accent-color);
     background-color: rgba(10, 132, 255, 0.05);
+}
+
+.copy-toggle {
+    display: flex;
+    align-items: center;
+}
+
+.toggle-switch {
+    background: transparent;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    width: 64px;
+    height: 32px;
+    position: relative;
+    outline: none;
+}
+
+.toggle-track {
+    display: block;
+    width: 100%;
+    height: 100%;
+    background: var(--card-background);
+    border: 1px solid var(--border-color);
+    border-radius: 32px;
+    position: relative;
+    transition: background-color 0.2s, border-color 0.2s;
+}
+
+.toggle-thumb {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 26px;
+    height: 26px;
+    background: var(--text-color);
+    border-radius: 50%;
+    transition: left 0.2s ease, background-color 0.2s, filter 0.2s;
+    z-index: 2;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.toggle-label {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1;
+    color: var(--secondary-text-color);
+    transition: color 0.2s;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.toggle-label-left {
+    left: 10px;
+}
+
+.toggle-label-right {
+    right: 10px;
+}
+
+.strike {
+    text-decoration: line-through;
+}
+
+.toggle-switch.off .toggle-thumb {
+    left: 2px;
+}
+
+.toggle-switch.off .toggle-label-left {
+    color: var(--accent-color);
+}
+
+.toggle-switch.off .toggle-label-right {
+    color: var(--secondary-text-color);
+}
+
+.toggle-switch.on .toggle-thumb {
+    left: calc(100% - 26px - 2px);
+    background: var(--accent-color);
+}
+
+.toggle-switch.on .toggle-track {
+    border-color: var(--accent-color);
+}
+
+.toggle-switch.on .toggle-label-right {
+    color: var(--accent-color);
+}
+
+.toggle-switch.on .toggle-label-left {
+    color: var(--secondary-text-color);
+}
+
+.toggle-switch:hover .toggle-track {
+    border-color: var(--accent-color);
+}
+
+.toggle-switch:hover .toggle-thumb {
+    background: var(--accent-color);
+}
+
+.toggle-switch.on:hover .toggle-thumb {
+    filter: brightness(1.2);
+    background: var(--accent-color);
+}
+
+.toggle-switch.on:hover .toggle-track {
+    border-color: var(--accent-color);
 }

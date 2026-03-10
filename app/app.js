@@ -28,6 +28,7 @@
     const searchWrapper = document.querySelector('.search-wrapper');
     const sortControls = document.querySelector('.sort-controls');
     const clearSearchBtn = document.getElementById('clear-search-btn');
+    const copyToggleBtn = document.getElementById('copy-toggle-btn');
     let allItems = [];
     const galleryTitle = document.getElementById('gallery-title');
     let itemsSortedByWorks = []; 
@@ -50,6 +51,7 @@
     const FOLDERS_PANEL_VISIBLE_KEY = 'foldersPanelVisible';
     let isJumpingToArtist = false; // Флаг для отслеживания состояния "прыжка"
     let isFoldersPanelVisible = true; // Состояние видимости панели папок
+    let copyWithAtSign = true; // prefix copied artist names with `@`
     const SORT_DIRECTION_KEY = 'sortDirection';
 
     // --- Глобальные переменные для доступа из других скриптов ---
@@ -258,7 +260,7 @@
                 }
             } else {
                 // Стандартное поведение: копирование имени и сброс выделения
-                navigator.clipboard.writeText('@' + item.artist).then(() => {
+                navigator.clipboard.writeText((copyWithAtSign ? '@' : '') + item.artist).then(() => {
                     showToast('Artist name copied to clipboard!');
                 });
                 // Сбрасываем выделение, если кликнули без Ctrl
@@ -1026,6 +1028,32 @@
             e.target.blur();
         }
     });
+
+    function toggleCopyWithAtSign() {
+        copyWithAtSign = !copyWithAtSign;
+        localStorage.setItem('copyWithAtSign', copyWithAtSign);
+        updateCopyToggleButton();
+    }
+
+    function updateCopyToggleButton() {
+        if (copyWithAtSign) {
+            copyToggleBtn.classList.remove('off');
+            copyToggleBtn.classList.add('on');
+            copyToggleBtn.title = 'Copy with @';
+        } else {
+            copyToggleBtn.classList.remove('on');
+            copyToggleBtn.classList.add('off');
+            copyToggleBtn.title = 'Copy without @';
+        }
+    }
+
+    const savedCopyWithAtSign = localStorage.getItem('copyWithAtSign');
+    if (savedCopyWithAtSign !== null) {
+        copyWithAtSign = savedCopyWithAtSign === 'true';
+    }
+
+    copyToggleBtn.addEventListener('click', toggleCopyWithAtSign);
+    updateCopyToggleButton();
 
     // --- Логика перехода к номеру ---
     function handleJump(isReset = false) {
