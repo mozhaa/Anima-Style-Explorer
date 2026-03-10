@@ -1570,7 +1570,6 @@ input[type="range"]::-webkit-slider-thumb {
     font-size: 14px;
     font-weight: 600;
     line-height: 1;
-    color: var(--secondary-text-color);
     transition: color 0.2s;
     pointer-events: none;
     z-index: 1;
@@ -1592,13 +1591,14 @@ input[type="range"]::-webkit-slider-thumb {
     left: 2px;
 }
 
-.toggle-switch.off .toggle-label-left {
+.toggle-switch.off {
+    color: var(--secondary-text-color);
+}
+
+.toggle-switch.on {
     color: var(--accent-color);
 }
 
-.toggle-switch.off .toggle-label-right {
-    color: var(--secondary-text-color);
-}
 
 .toggle-switch.on .toggle-thumb {
     left: calc(100% - 26px - 2px);
@@ -1607,14 +1607,6 @@ input[type="range"]::-webkit-slider-thumb {
 
 .toggle-switch.on .toggle-track {
     border-color: var(--accent-color);
-}
-
-.toggle-switch.on .toggle-label-right {
-    color: var(--accent-color);
-}
-
-.toggle-switch.on .toggle-label-left {
-    color: var(--secondary-text-color);
 }
 
 .toggle-switch:hover .toggle-track {
